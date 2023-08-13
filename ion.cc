@@ -67,6 +67,7 @@ ion_user_handle_t ION_alloc(int len, int heap_id) {
     allocation_data.align = 0;
     allocation_data.len = len;
     int err = ioctl(ion_fd, ION_IOC_ALLOC, &allocation_data);
+    // print("err: %d, handle: %d.\n", err, allocation_data.handle);
     if (err) return 0;
     return allocation_data.handle;
 }
@@ -160,9 +161,11 @@ int ION_bulk(int len, std::vector<struct ion_data *> &chunks, int max, bool mmap
         }
 
         data->handle = ION_alloc(len);
+        // print("data->handle: %d\n", data->handle);
         if (data->handle == 0) {
             /* Could not allocate, probably exhausted the ion chunks */
             free(data);
+            // print("Could not allocate, probably exhausted the ion chunks.\n");
             break;
         }
         data->len = len;
@@ -193,7 +196,9 @@ int ION_bulk(int len, std::vector<struct ion_data *> &chunks, int max, bool mmap
 void ION_clean_all(std::vector<struct ion_data *> &chunks, int max) {
     if (!max) max = chunks.size();
     for (int i = 0; i < max; i++) {
+        printf("Clean: %d, %x\n", i, chunks[i]->handle);
         ION_clean(chunks[i]);
+        printf("Clean: %d, %x\n", i, chunks[i]->handle);
         delete(chunks[i]);
     }
     chunks.erase(chunks.begin(), chunks.begin() + max); // remove first <max> elements

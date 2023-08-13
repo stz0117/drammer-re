@@ -28,7 +28,7 @@ extern int rowsize;
 
 #define FLIP_DIRECTION_STR(x) (((x) == ONE_TO_ZERO) ? "1-to-0" : "0-to-1")
 
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define dprintf(...) printf(__VA_ARGS__)
@@ -167,9 +167,9 @@ void handle_flip(uint8_t *virt_row,
     tmpl->found_at = time(NULL);
     
     
-    print("[FLIP] i:%p l:%d v:%p p:%p b:%5d 0x%08x != 0x%08x s:%d", 
-                     tmpl->ion_chunk->mapping, 
-                     tmpl->ion_len,
+    print("[FLIP] i:%p l:%d/%d v:%p p:%p b:%5d 0x%08x != 0x%08x s:%d",
+                     tmpl->ion_chunk->mapping,
+                     tmpl->rel_address, tmpl->ion_len,
             (void *) tmpl->virt_addr, 
             (void *) tmpl->phys_addr, 
                      tmpl->byte_index_in_row,
@@ -405,14 +405,14 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
         if (times_up) break;
 
         /* clean */
-        ION_clean(chunk);
+//        ION_clean(chunk);
     }
 
     int median_readtime = compute_median(readtimes);
 
     printf("\n[TMPL] Done templating\n");
     int flips = templates.size();
-    print("[TMPL] - bytes hammered: %d (%d MB)\n", bytes_hammered, bytes_hammered / 1024 / 1024);
+    print("[TMPL] - bytes hammered: %d (%.2f MB)\n", bytes_hammered, bytes_hammered * 1.0 / 1024 / 1024);
     print("[TMPL] - median readtime: %d\n", median_readtime);
     print("[TMPL] - unique flips: %d (1-to-0: %d / 0-to-1: %d)\n", flips,
             get_direction_flip_count(templates, ONE_TO_ZERO),

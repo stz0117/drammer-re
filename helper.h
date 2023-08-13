@@ -67,6 +67,7 @@ static inline uintptr_t get_phys_addr(uintptr_t virtual_addr) {
         pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
         if (pagemap_fd < 0) {
             got_pagemap = false;
+            printf("Fail to open pagemap, pagemap_fd = %d\n", pagemap_fd);
             return 0;
         }
     }

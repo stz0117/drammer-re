@@ -67,6 +67,13 @@ void resetter(uint8_t *pattern) {
 
 
 int main(int argc, char *argv[]) {
+    // int tmp = open("/proc/self/pagemap", O_RDONLY);
+    // if (tmp < 0) {
+    //     printf("Fail to open pagemap, pagemap_fd = %d\n", tmp);
+    //     return -1;
+    // } else {
+    //     printf("Success.\n");
+    // }
     printf("______   ______ _______ _______ _______ _______  ______  \n");
     printf("|     \\ |_____/ |_____| |  |  | |  |  | |______ |_____/ \n");
     printf("|_____/ |    \\_ |     | |  |  | |  |  | |______ |    \\_\n");
@@ -173,6 +180,7 @@ int main(int argc, char *argv[]) {
         printf("[MAIN] No or weird row size provided, trying auto detect\n");
         rowsize = RS_autodetect();
     }
+    // 65536 for Nexus 5
     print("[MAIN] Row size: %d\n", rowsize);
 
     /*** EXHAUST */
@@ -240,6 +248,8 @@ int main(int argc, char *argv[]) {
     /*** TEMPLATE */
     printf("[MAIN] Start templating\n");
     TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
+
+
   
     /*** CLEAN UP */
     ION_clean_all(ion_chunks);

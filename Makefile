@@ -14,7 +14,7 @@
  # limitations under the License.
  ## 
 
-STANDALONE_TOOLCHAIN ?= $(HOME)/src/android-ndk-r11c/sysroot-arm/bin
+STANDALONE_TOOLCHAIN ?= ./android-ndk-r11c/sysroot-arm/bin
 
 CC    = $(STANDALONE_TOOLCHAIN)/arm-linux-androideabi-gcc
 CXX   = $(STANDALONE_TOOLCHAIN)/arm-linux-androideabi-g++
