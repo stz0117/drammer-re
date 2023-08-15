@@ -113,6 +113,9 @@ int ION_mmap(struct ion_data *data, int prot, int flags, void *addr) {
  * Free a struct ion_data 
  **********************************************/
 void ION_clean(struct ion_data *data) {
+    if (data == NULL) {
+        return;
+    }
     if (data->mapping) {
         if (munmap(data->mapping, data->len)) {
             perror("Could not munmap");
@@ -196,9 +199,9 @@ int ION_bulk(int len, std::vector<struct ion_data *> &chunks, int max, bool mmap
 void ION_clean_all(std::vector<struct ion_data *> &chunks, int max) {
     if (!max) max = chunks.size();
     for (int i = 0; i < max; i++) {
-        printf("Clean: %d, %x\n", i, chunks[i]->handle);
+//        printf("Clean: %d, %x\n", i, chunks[i]->handle);
         ION_clean(chunks[i]);
-        printf("Clean: %d, %x\n", i, chunks[i]->handle);
+//        printf("Clean: %d, %x\n", i, chunks[i]->handle);
         delete(chunks[i]);
     }
     chunks.erase(chunks.begin(), chunks.begin() + max); // remove first <max> elements

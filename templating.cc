@@ -395,6 +395,8 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
        
                 bytes_hammered += step;
 
+                if (get_exploitable_flip_count(templates) != 0) times_up = true;
+
                 if (times_up) break;
             }
             printf("\n");

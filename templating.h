@@ -89,5 +89,6 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
               std::vector<struct pattern_t *> &patterns, int timer, int hammer_readcount,
               bool do_conservative);
 struct template_t *find_template_in_rows(std::vector<struct ion_data *> &chunks, struct template_t *needle);
+struct template_t * get_first_exploitable_flip(std::vector<struct template_t *> &templates);
 
 #endif // __TEMPLATING_H__
