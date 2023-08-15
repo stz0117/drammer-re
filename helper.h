@@ -61,6 +61,33 @@ static inline uint64_t get_ms(void) {
 static int pagemap_fd = 0;
 static bool got_pagemap = true;
 
+static int buddy_fd = 0;
+
+static inline int get_buddy_info(bool print_only, uint32_t free[11]) {
+    if (buddy_fd == 0) {
+        buddy_fd = open("/proc/buddyinfo", O_RDONLY);
+    }
+
+    char buf[256] = "", find[] = "Normal";
+    while (read(buddy_fd, buf, 100) == 100) {
+        char *p = strstr(buf, find);
+        if (p != NULL) {
+            printf("%s", buf);
+            if (!print_only) {
+                for (int i = 0; i < 11; i++) {
+                    for(; !(*p >= '0' && *p <= '9'); p++);
+                    sscanf(p, "%d", &free[i]);
+                    for(; !(*p == ' ' || *p == '\n'); p++);
+                }
+            }
+            break;
+        }
+    }
+    lseek(buddy_fd, 0, SEEK_SET);
+
+    return 0;
+}
+
 static inline uintptr_t get_phys_addr(uintptr_t virtual_addr) {
     if (!got_pagemap) return 0;
     if (pagemap_fd == 0) {
