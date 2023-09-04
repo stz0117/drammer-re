@@ -34,8 +34,8 @@ rh-test: rh-test.o ion.o rowsize.o templating.o massage.o
 	$(CPP) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 	$(STRIP) $@
 
-%.o: %.cc
-	$(CPP) $(CPPFLAGS) $(INCLUDES) -c -o $@ $<
+%.o: %.cc helper.h
+	$(CPP) $(CPPFLAGS) -c -o $@ $<
 
 install:
 	make all
@@ -43,7 +43,7 @@ install:
 	adb shell chmod 755 $(TMPDIR)$(TARGET)
 
 clean:
-	rm -f $(TARGET) *.o a.out
+	rm -f $(TARGET) *.o
 
 upload:
 	scp rh-test vvdveen.com:/home/vvdveen/www/drammer/rh-test

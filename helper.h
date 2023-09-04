@@ -56,37 +56,118 @@ static inline uint64_t get_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return MILLION * (uint64_t) tv.tv_sec + tv.tv_usec;
+
+}
+
+static inline int get_status_info(char find[] = NULL) {
+    int status_fd = open("/proc/self/status", O_RDONLY);
+    const int BUF_LEN = 256;
+    char buf[BUF_LEN] = "";
+    while (true) {
+        int count = read(status_fd, buf, BUF_LEN-1);
+        buf[count] = 0;
+        if (find != NULL) {
+            char *p = strstr(buf, find);
+            if (p != NULL) {
+                if(p + 19 <= buf + BUF_LEN) {
+                    *(p + 19) = 0;
+                    printf("%s", p);
+                } else {
+                    read(status_fd, buf, 20);
+                    buf[p+19 - buf+BUF_LEN] = 0;
+                    printf("%s%s", p, buf);
+                }
+                break;
+            }
+            lseek(status_fd, -strlen(find), SEEK_CUR);
+        } else {
+            printf("%s", buf);
+        }
+        if (count != BUF_LEN-1) break;
+    }
+    close(status_fd);
+    return 0;
+}
+
+static int maps_fd = 0;
+
+static inline int get_maps_info() {
+//    if (maps_fd == 0) {
+    maps_fd = open("/proc/self/maps", O_RDONLY);
+//    }
+
+    char buf[256] = "";
+    while (true) {
+        int count = read(maps_fd, buf, 255);
+        buf[count] = 0;
+        printf("%s", buf);
+        if (count != 255) break;
+    }
+//    lseek(maps_fd, 0, SEEK_SET);
+    close(maps_fd);
+    return 0;
+}
+
+static int pagetype_fd = 0;
+
+static inline int get_pagetype_info() {
+//    if (pagetype_fd == 0) {
+        pagetype_fd = open("/proc/pagetypeinfo", O_RDONLY);
+//    }
+
+    char buf[256] = "";
+    while (true) {
+        int count = read(pagetype_fd, buf, 255);
+        buf[count] = 0;
+        printf("%s", buf);
+        if (count != 255) break;
+    }
+//    lseek(pagetype_fd, 0, SEEK_SET);
+    close(pagetype_fd);
+    return 0;
+}
+
+static int buddy_fd = 0;
+
+static inline int get_buddy_info(char find[] = NULL, uint32_t free[] = NULL) {
+    if (buddy_fd == 0) {
+        buddy_fd = open("/proc/buddyinfo", O_RDONLY);
+    }
+    const int BUF_LEN = 256;
+    char buf[BUF_LEN] = "";
+    while (true) {
+        int count = read(buddy_fd, buf, BUF_LEN-1);
+        buf[count] = 0;
+
+        if (find == NULL) {
+            printf("%s", buf);
+        } else {
+            char *p = strstr(buf, find);
+            if (p != NULL) {
+                char *q = p;
+                for(; *q != '\n'; q++);
+                *q = 0;
+                printf("%s\n", buf);
+                if (free != NULL) {
+                    for (int i = 0; i < 11; i++) {
+                        for(; !(*p >= '0' && *p <= '9'); p++);
+                        sscanf(p, "%d", &free[i]);
+                        for(; !(*p == ' ' || *p == 0); p++);
+                    }
+                }
+                break;
+            }
+        }
+
+        if (count != BUF_LEN-1) break;
+    }
+    lseek(buddy_fd, 0, SEEK_SET);
+//    close(buddy_fd);
+    return 0;
 }
 
 static int pagemap_fd = 0;
 static bool got_pagemap = true;
-
-static int buddy_fd = 0;
-
-static inline int get_buddy_info(bool print_only, uint32_t free[11]) {
-    if (buddy_fd == 0) {
-        buddy_fd = open("/proc/buddyinfo", O_RDONLY);
-    }
-
-    char buf[256] = "", find[] = "Normal";
-    while (read(buddy_fd, buf, 100) == 100) {
-        char *p = strstr(buf, find);
-        if (p != NULL) {
-            printf("%s", buf);
-            if (!print_only) {
-                for (int i = 0; i < 11; i++) {
-                    for(; !(*p >= '0' && *p <= '9'); p++);
-                    sscanf(p, "%d", &free[i]);
-                    for(; !(*p == ' ' || *p == '\n'); p++);
-                }
-            }
-            break;
-        }
-    }
-    lseek(buddy_fd, 0, SEEK_SET);
-
-    return 0;
-}
 
 static inline uintptr_t get_phys_addr(uintptr_t virtual_addr) {
     if (!got_pagemap) return 0;
@@ -102,15 +183,22 @@ static inline uintptr_t get_phys_addr(uintptr_t virtual_addr) {
     off_t offset = (virtual_addr / PAGESIZE) * sizeof(value);
     int got = pread(pagemap_fd, &value, sizeof(value), offset);
     assert(got == 8);
-  
+
     // Check the "page present" flag.
     if ((value & (1ULL << 63)) == 0) {
-        printf("page not present? virtual address: %p | value: %p\n", virtual_addr, value);
+        printf("page not present? virtual address: %p | value: %p\n", (void *)virtual_addr, (void *)value);
         return 0;
     }
 
     uint64_t frame_num = (value & ((1ULL << 54) - 1));
     return (frame_num * PAGESIZE) | (virtual_addr & (PAGESIZE-1));
+}
+
+static inline int helper_clean(void) {
+    close(pagetype_fd);
+    close(buddy_fd);
+    close(pagemap_fd);
+    return 0;
 }
 
 static inline uint64_t compute_median(std::vector<uint64_t> &v) {

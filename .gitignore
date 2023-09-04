@@ -1,3 +1,4 @@
 *.o
 rh-test
-android*
+android-ndk-r11c
+platform-tools
