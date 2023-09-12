@@ -147,7 +147,7 @@ static inline int get_buddy_info(char find[] = NULL, uint32_t free[] = NULL) {
                 char *q = p;
                 for(; *q != '\n'; q++);
                 *q = 0;
-                printf("%s\n", buf);
+//                printf("%s\n", buf);
                 if (free != NULL) {
                     for (int i = 0; i < 11; i++) {
                         for(; !(*p >= '0' && *p <= '9'); p++);

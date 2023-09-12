@@ -23,19 +23,22 @@ STRIP = $(STANDALONE_TOOLCHAIN)/arm-linux-androideabi-strip
 
 CPPFLAGS = -std=c++11 -O3 -Wall
 LDFLAGS  = -pthread -static
-INCLUDES = -I$(PWD)/../include
+#INCLUDES = -I$(PWD)/../include
 
 TMPDIR  = /data/local/tmp/
 TARGET ?= rh-test
 
 all: $(TARGET)
 
-rh-test: rh-test.o ion.o rowsize.o templating.o massage.o
+rh-test: rh-test.o ion.o rowsize.o templating.o massage.o log.o
 	$(CPP) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 	$(STRIP) $@
 
 %.o: %.cc helper.h
 	$(CPP) $(CPPFLAGS) -c -o $@ $<
+
+log.o: log/src/log.cc
+	$(CPP) $(CPPFLAGS) -DLOG_USE_COLOR -c -o $@ $<
 
 install:
 	make all
