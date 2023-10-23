@@ -3,3 +3,6 @@ rh-test
 android-ndk-r11c
 platform-tools
 test.sh
+log
+.idea
+.vscode

