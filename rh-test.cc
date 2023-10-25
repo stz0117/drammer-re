@@ -68,6 +68,52 @@ void resetter(uint8_t *pattern) {
     }
 }
 
+void page_allocation_demo() {
+    uint8_t *start = (uint8_t *)0x14000000;
+    uint8_t *p = start;
+    uint32_t interval = M(2);
+    uint32_t length = K(4);
+    uint32_t count = 128*4;
+    uint32_t free_before[11], free_mid[11], free_after[11];
+    get_maps_info();
+    get_buddy_info("Normal", free_before);
+    get_status_info("VmPTE");
+    for (uint32_t i = 0; i < count; i++) {
+        mmap(p, length, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        uint8_t *q = p;
+        *q = 0xFF;
+        p = p + interval;
+//            get_buddy_info("Normal");
+//            // get_status_info affects page allocation stability. Only used when observing.
+//            get_status_info("VmPTE");
+    }
+    get_buddy_info("Normal", free_mid);
+//        get_status_info("VmPTE");
+
+    p = start;
+    for (uint32_t i = 0; i < count; i++) {
+        munmap(p, length);
+        p = p + interval;
+    }
+
+//        get_maps_info();
+    get_buddy_info("Normal", free_after);
+//        get_status_info("VmPTE");
+
+    int dif_mid = 0, dif_after = 0;
+    for (uint32_t i = 0; i < 11; i++) {
+        dif_mid = dif_mid + (((int)free_mid[i] - (int)free_before[i]) << i);
+    }
+    for (uint32_t i = 0; i < 11; i++) {
+        dif_after = dif_after + (((int)free_after[i] - (int)free_before[i]) << i);
+    }
+    printf("Page count differences between start and mid: %d\n", dif_mid);
+    printf("Page count differences between start and end: %d\n", dif_after);
+
+    helper_clean();
+    return;
+}
+
 
 int main(int argc, char *argv[]) {
     // int tmp = open("/proc/self/pagemap", O_RDONLY);
@@ -146,58 +192,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (experimental) {
-        uint8_t *start = (uint8_t *)0x14000000;
-        uint8_t *p = start;
-        uint32_t interval = M(2);
-        uint32_t length = K(4);
-        uint32_t count = 128*4;
-        uint32_t free_before[11], free_mid[11], free_after[11];
-        get_maps_info();
-        get_buddy_info("Normal", free_before);
-        get_status_info("VmPTE");
-        for (uint32_t i = 0; i < count; i++) {
-            mmap(p, length, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            uint8_t *q = p;
-            *q = 0xFF;
-            p = p + interval;
-//            get_buddy_info("Normal");
-//            // get_status_info affects page allocation stability. Only used when observing.
-//            get_status_info("VmPTE");
-        }
-        get_buddy_info("Normal", free_mid);
-//        get_status_info("VmPTE");
-
-        p = start;
-        for (uint32_t i = 0; i < count; i++) {
-            munmap(p, length);
-            p = p + interval;
-        }
-
-//        get_maps_info();
-        get_buddy_info("Normal", free_after);
-//        get_status_info("VmPTE");
-
-        int dif_mid = 0, dif_after = 0;
-        for (uint32_t i = 0; i < 11; i++) {
-            dif_mid = dif_mid + (((int)free_mid[i] - (int)free_before[i]) << i);
-        }
-        for (uint32_t i = 0; i < 11; i++) {
-            dif_after = dif_after + (((int)free_after[i] - (int)free_before[i]) << i);
-        }
-        printf("Page count differences between start and mid: %d\n", dif_mid);
-        printf("Page count differences between start and end: %d\n", dif_after);
-
-        helper_clean();
-        return 0;
-    }
-
-
     printf("[MAIN] ION init\n");
     ION_init();
-    
+
     std::vector<struct ion_data *> ion_chunks;
     std::vector<struct template_t *> templates;
+
+    if (experimental) {
+        log_debug("%llu", sizeof(long));
+        log_debug("%u", 0x1234567812345678);
+        log_debug("%llu", 0x1234567812345678);
+        log_debug("%x", 0x1234567812345678);
+        log_debug("%llx", 0x1234567812345678);
+        ION_bulk(K(64), ion_chunks, 1, true);
+        auto chunk_idx = ion_chunks.at(0);
+        auto row_addr = (uint64_t *) chunk_idx->mapping;
+        for (uintptr_t offset = 0; offset < 32 / sizeof(*row_addr); offset += 1) {
+            log_debug("[MAP P] content of %p: %#llX", row_addr + offset, *(row_addr + offset));
+        }
+        return 0;
+    }
 
     if (outputfile != NULL) {
         global_of = fopen(outputfile, "w");
