@@ -59,7 +59,7 @@ static inline uint64_t get_ms(void) {
 
 }
 
-static inline int get_status_info(char find[] = NULL) {
+static inline int get_status_info(const char find[] = NULL) {
     int status_fd = open("/proc/self/status", O_RDONLY);
     const int BUF_LEN = 256;
     char buf[BUF_LEN] = "";
@@ -129,7 +129,7 @@ static inline int get_pagetype_info() {
 
 static int buddy_fd = 0;
 
-static inline int get_buddy_info(char find[] = NULL, uint32_t free[] = NULL) {
+static inline int get_buddy_info(const char find[] = NULL, uint32_t free[] = NULL) {
     if (buddy_fd == 0) {
         buddy_fd = open("/proc/buddyinfo", O_RDONLY);
     }
