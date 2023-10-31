@@ -258,20 +258,20 @@ int do_hammer(uint8_t *virt_row,
                         pattern, templates, i, chunk);
         }
 
-        if (row_above[i] != pattern_above[i] ) {
-            spc_flips++;
-            new_flips++;
-            if (new_flips == 1) printf("\n");
-            print("[SPECIAL FLIP] v:%p 0x%08x != 0x%08x\n", (uintptr_t) virt_above + i, virt_above[i], pattern_above[i]);
-        }
-        if (row_below[i] != pattern_below[i]) {
-            spc_flips++;
-            new_flips++;
-            if (new_flips == 1) printf("\n");
-            print("[SPECIAL FLIP] v:%p 0x%08x != 0x%08x\n", (uintptr_t) virt_below + i, virt_below[i], pattern_below[i]);
-        }
+//        if (row_above[i] != pattern_above[i] ) {
+//            spc_flips++;
+//            new_flips++;
+//            if (new_flips == 1) printf("\n");
+//            print("[SPECIAL FLIP] v:%p 0x%08x != 0x%08x\n", (uintptr_t) virt_above + i, virt_above[i], pattern_above[i]);
+//        }
+//        if (row_below[i] != pattern_below[i]) {
+//            spc_flips++;
+//            new_flips++;
+//            if (new_flips == 1) printf("\n");
+//            print("[SPECIAL FLIP] v:%p 0x%08x != 0x%08x\n", (uintptr_t) virt_below + i, virt_below[i], pattern_below[i]);
+//        }
     }
-    if (new_flips > 0)  
+//    if (new_flips > 0)
 //        printf("[TMPL - deltas] virtual row %d: ", (uintptr_t) virt_row / rowsize);
 
     return ns_per_read;
