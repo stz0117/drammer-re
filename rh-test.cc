@@ -111,9 +111,31 @@ void page_allocation_demo() {
     printf("Page count differences between start and end: %d\n", dif_after);
 
     helper_clean();
-    return;
 }
 
+void long_test(std::vector<struct ion_data *> ion_chunks) {
+    log_debug("%llu", sizeof(long));
+    log_debug("%u", 0x1234567812345678);
+    log_debug("%llu", 0x1234567812345678);
+    log_debug("%x", 0x1234567812345678);
+    log_debug("%llx", 0x1234567812345678);
+    ION_bulk(K(64), ion_chunks, 1, true);
+    auto chunk_idx = ion_chunks.at(0);
+    auto row_addr = (uint64_t *) chunk_idx->mapping;
+    for (uintptr_t offset = 0; offset < 32 / sizeof(*row_addr); offset += 1) {
+        log_debug("[MAP P] content of %p: %#llX", row_addr + offset, *(row_addr + offset));
+    }
+}
+
+void mem_dev_test() {
+    // no /dev/mem on nexus
+    int dev_fd = open("/dev/mem", O_RDONLY);
+    log_debug("dev_fd: %d", dev_fd);
+    void* addr = mmap(NULL, 1024, PROT_READ | PROT_WRITE, MAP_SHARED, dev_fd, 0);
+    log_debug("addr: %p", addr);
+
+    printf("%llx", *(long long*)addr);
+}
 
 int main(int argc, char *argv[]) {
     // int tmp = open("/proc/self/pagemap", O_RDONLY);
@@ -199,17 +221,7 @@ int main(int argc, char *argv[]) {
     std::vector<struct template_t *> templates;
 
     if (experimental) {
-        log_debug("%llu", sizeof(long));
-        log_debug("%u", 0x1234567812345678);
-        log_debug("%llu", 0x1234567812345678);
-        log_debug("%x", 0x1234567812345678);
-        log_debug("%llx", 0x1234567812345678);
-        ION_bulk(K(64), ion_chunks, 1, true);
-        auto chunk_idx = ion_chunks.at(0);
-        auto row_addr = (uint64_t *) chunk_idx->mapping;
-        for (uintptr_t offset = 0; offset < 32 / sizeof(*row_addr); offset += 1) {
-            log_debug("[MAP P] content of %p: %#llX", row_addr + offset, *(row_addr + offset));
-        }
+        mem_dev_test();
         return 0;
     }
 
